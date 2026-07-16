@@ -2168,30 +2168,31 @@ public class Player extends GameEntity implements Comparable<Player> {
 
     @Override
     public final boolean isValid(final String restriction, final Player sourceController, final Card source, CardTraitBase spellAbility) {
-        final String[] incR = restriction.split("\\.", 2);
+        final int exclusiveIdx = restriction.indexOf('.');
+        final String incR = exclusiveIdx == -1 ? restriction : restriction.substring(0, exclusiveIdx);
 
-        if (incR[0].equals("Opponent")) {
+        if (incR.equals("Opponent")) {
             if (equals(sourceController) || !isOpponentOf(sourceController)) {
                 return false;
             }
-        } else if (incR[0].equals("You")) {
+        } else if (incR.equals("You")) {
             if (!equals(sourceController)) {
                 return false;
             }
-        } else if (incR[0].equals("Any")) {
+        } else if (incR.equals("Any")) {
             //todo further check for Effect API and other replacement Effect
             /*if (spellAbility == null)
                 return false;
             ApiType apiType = ((SpellAbility) spellAbility).getApi();
             if (!(ApiType.DealDamage.equals(apiType) || ApiType.PreventDamage.equals(apiType)))
                 return false;*/
-        } else if (!incR[0].equals("Player")) {
+        } else if (!incR.equals("Player")) {
             return false;
         }
 
-        if (incR.length > 1) {
-            final String excR = incR[1];
-            final String[] exR = excR.split("\\+"); // Exclusive Restrictions are ...
+        if (exclusiveIdx != -1) {
+            final String excR = restriction.substring(exclusiveIdx + 1);
+            final String[] exR = TextUtil.splitCachedPlus(excR); // Exclusive Restrictions are ...
             for (String s : exR) {
                 if (!hasProperty(s, sourceController, source, spellAbility)) {
                     return false;

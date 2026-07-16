@@ -2175,65 +2175,66 @@ public abstract class SpellAbility extends CardTraitBase implements ISpellAbilit
     @Override
     public final boolean isValid(final String restriction, final Player sourceController, final Card source, CardTraitBase spellAbility) {
         // Inclusive restrictions are Card types
-        final String[] incR = restriction.split("\\.", 2);
+        final int exclusiveIdx = restriction.indexOf('.');
+        String incR = exclusiveIdx == -1 ? restriction : restriction.substring(0, exclusiveIdx);
         SpellAbility root = getRootAbility();
 
         boolean testFailed = false;
-        if (incR[0].startsWith("!")) {
+        if (incR.startsWith("!")) {
             testFailed = true; // a bit counterintuitive
-            incR[0] = incR[0].substring(1); // consume negation sign
+            incR = incR.substring(1); // consume negation sign
         }
 
-        if (incR[0].equals("Spell")) {
+        if (incR.equals("Spell")) {
             if (!root.isSpell()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Ability")) {
+        else if (incR.equals("Ability")) {
             if (!root.isAbility()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Instant")) {
+        else if (incR.equals("Instant")) {
             if (!root.getCardState().getType().isInstant()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Sorcery")) {
+        else if (incR.equals("Sorcery")) {
             if (!root.getCardState().getType().isSorcery()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Triggered")) {
+        else if (incR.equals("Triggered")) {
             if (!root.isTrigger()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Activated")) {
+        else if (incR.equals("Activated")) {
             if (!root.isActivatedAbility()) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("Static")) {
+        else if (incR.equals("Static")) {
             if (!(root instanceof AbilityStatic)) {
                 return testFailed;
             }
         }
-        else if (incR[0].contains("LandAbility")) {
+        else if (incR.contains("LandAbility")) {
             if (!(root.isLandAbility())) {
                 return testFailed;
             }
         }
-        else if (incR[0].equals("SpellAbility")) {
+        else if (incR.equals("SpellAbility")) {
             // Match anything
         }
         else { //not a spell/ability type
             return testFailed;
         }
 
-        if (incR.length > 1) {
-            final String excR = incR[1];
-            final String[] exR = excR.split("\\+"); // Exclusive Restrictions are ...
+        if (exclusiveIdx != -1) {
+            final String excR = restriction.substring(exclusiveIdx + 1);
+            final String[] exR = TextUtil.splitCachedPlus(excR); // Exclusive Restrictions are ...
             for (String s : exR) {
                 if (!hasProperty(s, sourceController, source, spellAbility)) {
                     return testFailed;

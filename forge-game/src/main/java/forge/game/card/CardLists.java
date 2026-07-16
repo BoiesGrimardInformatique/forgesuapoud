@@ -28,6 +28,7 @@ import forge.game.staticability.StaticAbilityTapPowerValue;
 import forge.util.IterableUtil;
 import forge.util.MyRandom;
 import forge.util.StreamUtil;
+import forge.util.TextUtil;
 import forge.util.collect.FCollectionView;
 
 import java.util.ArrayList;
@@ -186,15 +187,15 @@ public class CardLists {
     }
 
     public static CardCollection getValidCards(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.filter(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.filter(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static List<Card> getValidCardsAsList(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.filterAsList(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.filterAsList(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static int getValidCardCount(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.count(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.count(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static CardCollection getTargetableCards(Iterable<Card> cardList, SpellAbility source) {
