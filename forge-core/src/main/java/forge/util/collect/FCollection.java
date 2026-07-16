@@ -272,8 +272,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
 
     @Override
     public boolean removeIf(Predicate<? super T> filter) {
-        if (list.removeIf(filter)) {
-            set.removeIf(filter);
+        // evaluate the (potentially expensive) filter only once per element,
+        // then sync the list using cheap hash lookups
+        if (set.removeIf(filter)) {
+            list.removeIf(e -> !set.contains(e));
             return true;
         }
         return false;
@@ -374,7 +376,11 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
         if (c == null)
             return false;
         for (final Object o : c) {
-            changed |= remove(o);
+            changed |= set.remove(o);
+        }
+        if (changed) {
+            // a single pass beats one linear list scan per removed element
+            list.removeIf(e -> !set.contains(e));
         }
         return changed;
     }
@@ -384,8 +390,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public boolean retainAll(final Collection<?> c) {
-        if (set.retainAll(c)) {
-            list.retainAll(c);
+        // ensure O(1) membership tests when c is a plain list
+        final Collection<?> lookup = c instanceof Set || c instanceof FCollection ? c : new HashSet<>(c);
+        if (set.retainAll(lookup)) {
+            list.removeIf(e -> !set.contains(e));
             return true;
         }
         return false;
