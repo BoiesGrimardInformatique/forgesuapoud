@@ -586,6 +586,9 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
         if (obj == null) {
             return null;
         }
+        if (!set.contains(obj)) { // O(1) miss check before the linear scan for the canonical element
+            return obj;
+        }
         for(T x : this) {
             if (x.equals(obj)) {
                 return x;
