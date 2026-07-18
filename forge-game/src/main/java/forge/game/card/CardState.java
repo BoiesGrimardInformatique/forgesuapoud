@@ -383,6 +383,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
 
     public final void setCachedKeywords(final KeywordCollection col) {
         cachedKeywords = col;
+        card.bumpTraitVersion(); // keywords contribute granted static abilities
     }
 
     public final boolean hasKeyword(Keyword key) {
@@ -671,16 +672,28 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
         return abilities.add(a);
     }
 
+    // assembled triggers, rebuilt lazily when the card's trait version moves;
+    // rebuilds swap in a fresh collection, so handed-out views stay valid snapshots
+    private FCollectionView<Trigger> triggersCache;
+    private long triggersCacheVersion = -1;
+
     public final FCollectionView<Trigger> getTriggers() {
-        FCollection<Trigger> result = new FCollection<>(triggers);
-        if (getStateName().equals(CardStateName.Original)) {
-            if (getCard().hasState(CardStateName.LeftSplit))
-                result.addAll(getCard().getState(CardStateName.LeftSplit).triggers);
-            if (getCard().hasState(CardStateName.RightSplit))
-                result.addAll(getCard().getState(CardStateName.RightSplit).triggers);
+        final long version = card.getTraitVersion();
+        FCollectionView<Trigger> cache = triggersCache;
+        if (cache == null || triggersCacheVersion != version) {
+            FCollection<Trigger> result = new FCollection<>(triggers);
+            if (getStateName().equals(CardStateName.Original)) {
+                if (getCard().hasState(CardStateName.LeftSplit))
+                    result.addAll(getCard().getState(CardStateName.LeftSplit).triggers);
+                if (getCard().hasState(CardStateName.RightSplit))
+                    result.addAll(getCard().getState(CardStateName.RightSplit).triggers);
+            }
+            card.updateTriggers(result, this);
+            triggersCacheVersion = version;
+            triggersCache = result;
+            cache = result;
         }
-        card.updateTriggers(result, this);
-        return result;
+        return cache;
     }
 
     public final boolean hasTrigger(final Trigger t) {
@@ -697,31 +710,82 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
     }
 
     public final boolean addTrigger(final Trigger t) {
+        card.bumpTraitVersion();
         return triggers.add(t);
     }
 
+    // assembled static abilities, rebuilt lazily when the card's trait version moves;
+    // rebuilds swap in a fresh collection, so handed-out views stay valid snapshots
+    private FCollectionView<StaticAbility> staticAbilitiesCache;
+    private long staticAbilitiesCacheVersion = -1;
+
     public final FCollectionView<StaticAbility> getStaticAbilities() {
-        FCollection<StaticAbility> result = new FCollection<>(staticAbilities);
-        if (getStateName().equals(CardStateName.Original)) {
-            if (getCard().hasState(CardStateName.LeftSplit))
-                result.addAll(getCard().getState(CardStateName.LeftSplit).staticAbilities);
-            if (getCard().hasState(CardStateName.RightSplit))
-                result.addAll(getCard().getState(CardStateName.RightSplit).staticAbilities);
+        final long version = card.getTraitVersion();
+        FCollectionView<StaticAbility> cache = staticAbilitiesCache;
+        if (cache == null || staticAbilitiesCacheVersion != version) {
+            FCollection<StaticAbility> result = new FCollection<>(staticAbilities);
+            if (getStateName().equals(CardStateName.Original)) {
+                if (getCard().hasState(CardStateName.LeftSplit))
+                    result.addAll(getCard().getState(CardStateName.LeftSplit).staticAbilities);
+                if (getCard().hasState(CardStateName.RightSplit))
+                    result.addAll(getCard().getState(CardStateName.RightSplit).staticAbilities);
+            }
+            card.updateStaticAbilities(result, this);
+            staticAbilitiesCacheVersion = version;
+            staticAbilitiesCache = result;
+            cache = result;
         }
-        card.updateStaticAbilities(result, this);
-        return result;
+        return cache;
     }
     public final boolean addStaticAbility(StaticAbility stab) {
+        card.bumpTraitVersion();
         return staticAbilities.add(stab);
     }
     public final boolean removeStaticAbility(StaticAbility stab) {
+        card.bumpTraitVersion();
         return staticAbilities.remove(stab);
     }
 
     public FCollectionView<ReplacementEffect> getReplacementEffects() {
         return getReplacementEffects(true);
     }
+
+    // assembled replacement effects, rebuilt lazily when the card's trait version
+    // moves; the rulesHost variant also depends on shield/stun/finality counters,
+    // so its cache is additionally keyed on their presence instead of hooking the
+    // (very frequent) counter mutations
+    private FCollectionView<ReplacementEffect> replacementEffectsCacheBase;
+    private long replacementEffectsCacheBaseVersion = -1;
+    private FCollectionView<ReplacementEffect> replacementEffectsCacheFull;
+    private long replacementEffectsCacheFullVersion = -1;
+    private int replacementEffectsCacheCounterKey = -1;
+
     public FCollectionView<ReplacementEffect> getReplacementEffects(boolean rulesHost) {
+        final long version = card.getTraitVersion();
+        if (rulesHost) {
+            final int counterKey = (card.getCounters(CounterEnumType.SHIELD) > 0 ? 1 : 0)
+                    | (card.getCounters(CounterEnumType.STUN) > 0 ? 2 : 0)
+                    | (card.getCounters(CounterEnumType.FINALITY) > 0 ? 4 : 0);
+            FCollectionView<ReplacementEffect> cache = replacementEffectsCacheFull;
+            if (cache == null || replacementEffectsCacheFullVersion != version
+                    || replacementEffectsCacheCounterKey != counterKey) {
+                cache = buildReplacementEffects(true);
+                replacementEffectsCacheFullVersion = version;
+                replacementEffectsCacheCounterKey = counterKey;
+                replacementEffectsCacheFull = cache;
+            }
+            return cache;
+        }
+        FCollectionView<ReplacementEffect> cache = replacementEffectsCacheBase;
+        if (cache == null || replacementEffectsCacheBaseVersion != version) {
+            cache = buildReplacementEffects(false);
+            replacementEffectsCacheBaseVersion = version;
+            replacementEffectsCacheBase = cache;
+        }
+        return cache;
+    }
+
+    private FCollection<ReplacementEffect> buildReplacementEffects(boolean rulesHost) {
         FCollection<ReplacementEffect> result = new FCollection<>(replacementEffects);
         // add Split to Original
         if (getStateName().equals(CardStateName.Original)) {
@@ -773,6 +837,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
         return result;
     }
     public boolean addReplacementEffect(final ReplacementEffect replacementEffect) {
+        card.bumpTraitVersion();
         return replacementEffects.add(replacementEffect);
     }
 
@@ -918,6 +983,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
                 staticAbilities.add(sa.copy(card, lki));
             }
         }
+        card.bumpTraitVersion();
         if (lki) {
             this.changedType = source.changedType;
             if (source.landAbility != null) {
@@ -975,6 +1041,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
                 staticAbilities.add(sa.copy(card, lki));
             }
         }
+        card.bumpTraitVersion();
     }
 
     public CardState copy(final Card host, CardStateName name, final boolean lki) {

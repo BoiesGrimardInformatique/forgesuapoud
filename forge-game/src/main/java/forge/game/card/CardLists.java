@@ -28,6 +28,7 @@ import forge.game.staticability.StaticAbilityTapPowerValue;
 import forge.util.IterableUtil;
 import forge.util.MyRandom;
 import forge.util.StreamUtil;
+import forge.util.TextUtil;
 import forge.util.collect.FCollectionView;
 
 import java.util.ArrayList;
@@ -152,13 +153,10 @@ public class CardLists {
             return null;
         }
 
+        // a single shuffle already makes every subset equally likely
         final CardCollection cs = new CardCollection(c);
-        final CardCollection subList = new CardCollection();
-        while (subList.size() < amount) {
-            CardLists.shuffle(cs);
-            subList.add(cs.remove(0));
-        }
-        return subList;
+        CardLists.shuffle(cs);
+        return cs.subList(0, amount);
     }
 
     public static void shuffle(List<Card> list) {
@@ -186,15 +184,15 @@ public class CardLists {
     }
 
     public static CardCollection getValidCards(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.filter(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.filter(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static List<Card> getValidCardsAsList(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.filterAsList(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.filterAsList(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static int getValidCardCount(Iterable<Card> cardList, String restriction, Player sourceController, Card source, CardTraitBase sa) {
-        return CardLists.count(cardList, CardPredicates.restriction(restriction.split(","), sourceController, source, sa));
+        return CardLists.count(cardList, CardPredicates.restriction(TextUtil.splitCachedComma(restriction), sourceController, source, sa));
     }
 
     public static CardCollection getTargetableCards(Iterable<Card> cardList, SpellAbility source) {
@@ -472,27 +470,32 @@ public class CardLists {
             else if (num < sum) numList.add(num);
         }
         if (numList.isEmpty()) return false;
-        numList.sort(null);
 
         return isSubsetSum(numList, sum);
     }
 
     public static boolean isSubsetSum(List<Integer> numList, int sum) {
         if (sum == 0) return true;
-        int size = numList.size();
-        if (size == 0) return false;
+        if (sum < 0 || numList.isEmpty()) return false;
 
-        Integer last = numList.get(size - 1);
-        numList.remove(last);
-        // If last element is greater than sum, then ignore it
-        if (last > sum) {
-            return isSubsetSum(numList, sum);
+        // bottom-up subset-sum in O(n * sum) instead of exponential recursion
+        final boolean[] reachable = new boolean[sum + 1];
+        reachable[0] = true;
+        for (final Integer num : numList) {
+            final int n = num;
+            if (n <= 0 || n > sum) {
+                continue;
+            }
+            for (int i = sum; i >= n; i--) {
+                if (reachable[i - n]) {
+                    reachable[i] = true;
+                }
+            }
+            if (reachable[sum]) {
+                return true;
+            }
         }
-
-        // Else, check if sum can be obtained by:
-        // (a) excluding the last element
-        // (b) including the last element
-        return isSubsetSum(numList, sum) || isSubsetSum(numList, sum - last);
+        return false;
     }
 
     public static int getDifferentNamesCount(Iterable<Card> cardList) {

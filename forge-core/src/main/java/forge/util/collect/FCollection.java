@@ -74,6 +74,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      *            creation.
      */
     public FCollection(final T[] c) {
+        allocate(c.length);
         this.addAll(Arrays.asList(c));
     }
 
@@ -85,7 +86,21 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      *            creation.
      */
     public FCollection(final Iterable<? extends T> i) {
+        if (i instanceof Collection) {
+            allocate(((Collection<?>) i).size());
+        }
         this.addAll(i);
+    }
+
+    /**
+     * Pre-size the backing structures when the expected element count is known,
+     * to avoid rehash/grow churn while copying larger collections.
+     */
+    private void allocate(final int expectedSize) {
+        if (expectedSize > 12) { // the default capacities already fit smaller collections
+            set = new HashSet<>((int) (expectedSize / 0.75f) + 1);
+            ((ArrayList<T>) list).ensureCapacity(expectedSize);
+        }
     }
 
     /**
@@ -272,8 +287,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
 
     @Override
     public boolean removeIf(Predicate<? super T> filter) {
-        if (list.removeIf(filter)) {
-            set.removeIf(filter);
+        // evaluate the (potentially expensive) filter only once per element,
+        // then sync the list using cheap hash lookups
+        if (set.removeIf(filter)) {
+            list.removeIf(e -> !set.contains(e));
             return true;
         }
         return false;
@@ -374,7 +391,11 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
         if (c == null)
             return false;
         for (final Object o : c) {
-            changed |= remove(o);
+            changed |= set.remove(o);
+        }
+        if (changed) {
+            // a single pass beats one linear list scan per removed element
+            list.removeIf(e -> !set.contains(e));
         }
         return changed;
     }
@@ -384,8 +405,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public boolean retainAll(final Collection<?> c) {
-        if (set.retainAll(c)) {
-            list.retainAll(c);
+        // ensure O(1) membership tests when c is a plain list
+        final Collection<?> lookup = c instanceof Set || c instanceof FCollection ? c : new HashSet<>(c);
+        if (set.retainAll(lookup)) {
+            list.removeIf(e -> !set.contains(e));
             return true;
         }
         return false;
@@ -562,6 +585,9 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public T get(final T obj) {
         if (obj == null) {
             return null;
+        }
+        if (!set.contains(obj)) { // O(1) miss check before the linear scan for the canonical element
+            return obj;
         }
         for(T x : this) {
             if (x.equals(obj)) {

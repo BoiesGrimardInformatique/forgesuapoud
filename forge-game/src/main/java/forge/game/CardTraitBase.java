@@ -31,6 +31,7 @@ import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import forge.util.Expressions;
 import forge.util.ITranslatable;
+import forge.util.TextUtil;
 
 /**
  * Base class for Triggers,ReplacementEffects and StaticAbilities.
@@ -258,7 +259,7 @@ public abstract class CardTraitBase implements GameObject, IHasCardView, IHasSVa
 
     public boolean matchesValidParam(String param, final Object o, final Card srcCard) {
         boolean result = hasParam("Invert" + param);
-        if (hasParam(param) && !matchesValid(o, getParam(param).split(","), srcCard)) {
+        if (hasParam(param) && !matchesValid(o, TextUtil.splitCachedComma(getParam(param)), srcCard)) {
             return result;
         }
         return !result;

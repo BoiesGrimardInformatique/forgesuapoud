@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** 
  * TODO: Write javadoc for this type.
@@ -78,6 +79,36 @@ public class TextUtil {
             mapAsString.append(p.getKey()).append(" => ").append(p.getValue() == null ? "(null)" : p.getValue().toString());
         }
         return mapAsString.toString();
+    }
+
+    /**
+     * Cached variants of {@link String#split(String)} for the delimiters used most
+     * heavily when processing card script strings. The same restriction/parameter
+     * strings are split over and over while filtering cards and checking triggers,
+     * so the resulting arrays are memoized. Returned arrays are shared between
+     * callers and must be treated as read-only.
+     */
+    private static final int SPLIT_CACHE_LIMIT = 16384;
+    private static final Map<String, String[]> commaSplitCache = new ConcurrentHashMap<>();
+    private static final Map<String, String[]> plusSplitCache = new ConcurrentHashMap<>();
+
+    public static String[] splitCachedComma(final String input) {
+        return splitCached(commaSplitCache, input, ",");
+    }
+
+    public static String[] splitCachedPlus(final String input) {
+        return splitCached(plusSplitCache, input, "\\+");
+    }
+
+    private static String[] splitCached(final Map<String, String[]> cache, final String input, final String regex) {
+        String[] result = cache.get(input);
+        if (result == null) {
+            result = input.split(regex);
+            if (cache.size() < SPLIT_CACHE_LIMIT) {
+                cache.put(input, result);
+            }
+        }
+        return result;
     }
 
     public static String[] split(CharSequence input, char delimiter) {

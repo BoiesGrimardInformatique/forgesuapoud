@@ -139,6 +139,11 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     private final Table<Long, Long, CardTraitChanges> changedCardTraitsByText = TreeBasedTable.create(); // Layer 3 by Text Change
     private final Table<Long, Long, ICardTraitChanges> changedCardTraits = TreeBasedTable.create(); // Layer 6
 
+    // bumped by every mutation that can change the assembled trait lists
+    // (trait/type tables, keyword cache rebuilds, intrinsic statics, card states),
+    // so CardState can cache the assembled static abilities between changes
+    private long traitVersion = 0;
+
     // stores the card traits created by static abilities
     private final Table<StaticAbility, String, SpellAbility> storedSpellAbility = TreeBasedTable.create();
     private final Table<StaticAbility, String, Trigger> storedTrigger = TreeBasedTable.create();
@@ -630,10 +635,12 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     public void setStates(Map<CardStateName, CardState> map) {
         states.clear();
         states.putAll(map);
+        bumpTraitVersion();
     }
 
     public final void addAlternateState(final CardStateName state, final boolean updateView) {
         states.put(state, new CardState(this, state));
+        bumpTraitVersion(); // the Original state aggregates split states' abilities
         if (updateView) {
             updateStateForView();
         }
@@ -643,6 +650,7 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
         if (states.remove(state) == null) {
             return;
         }
+        bumpTraitVersion(); // the Original state aggregates split states' abilities
         if (state == currentStateName) {
             currentStateName = CardStateName.Original;
         }
@@ -4175,7 +4183,15 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     }
 
     public final void updateTypeCache() {
+        bumpTraitVersion(); // hasRemoveIntrinsic depends on the type tables
         this.getCurrentState().updateTypes();
+    }
+
+    public final long getTraitVersion() {
+        return traitVersion;
+    }
+    public final void bumpTraitVersion() {
+        traitVersion++;
     }
 
     public boolean hasChangedCardColors() {
@@ -4908,12 +4924,14 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
         for (Table.Cell<Long, Long, CardTraitChanges> e : changes.cellSet()) {
             changedCardTraitsByText.put(e.getRowKey(), e.getColumnKey(), e.getValue().copy(this, true));
         }
+        bumpTraitVersion();
     }
     public final void addChangedCardTraitsByText(Collection<SpellAbility> spells,
             Collection<Trigger> trigger, Collection<ReplacementEffect> replacements, Collection<StaticAbility> statics, long timestamp, long staticId) {
         changedCardTraitsByText.put(timestamp, staticId, new CardTraitChanges(
             spells, trigger, replacements, statics, e -> true
         ));
+        bumpTraitVersion();
 
         // setting card traits via text, does overwrite any other word change effects?
         this.changedTextColors.addEmpty(timestamp, staticId);
@@ -4936,6 +4954,7 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     }
     public final ICardTraitChanges addChangedCardTraits(ICardTraitChanges changes, long timestamp, long staticId, boolean updateView) {
         changedCardTraits.put(timestamp, staticId, changes);
+        bumpTraitVersion();
         if (updateView) {
             updateAbilityTextForView();
         }
@@ -4943,13 +4962,26 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     }
 
     public final boolean removeChangedCardTraits(long timestamp, long staticId) {
-        return changedCardTraits.remove(timestamp, staticId) != null;
+        boolean removed = changedCardTraits.remove(timestamp, staticId) != null;
+        if (removed) {
+            bumpTraitVersion();
+        }
+        return removed;
     }
     public final boolean removeChangedCardTraitsByText(long timestamp, long staticId) {
-        return changedCardTraitsByText.remove(timestamp, staticId) != null;
+        boolean removed = changedCardTraitsByText.remove(timestamp, staticId) != null;
+        if (removed) {
+            bumpTraitVersion();
+        }
+        return removed;
     }
 
     public Iterable<ICardTraitChanges> getChangedCardTraitsList(CardState state) {
+        // fast path for the common case: iterating empty table views still
+        // builds costly cell iterators, and this runs on every ability lookup
+        if (changedCardTraitsByText.isEmpty() && changedCardTraits.isEmpty()) {
+            return ImmutableList.of(state.getLandTraitChanges()); // Layer 4
+        }
         return Iterables.<ICardTraitChanges>concat(
             changedCardTraitsByText.values(), // Layer 3
             ImmutableList.of(state.getLandTraitChanges()), // Layer 4
@@ -4966,6 +4998,7 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
         for (Table.Cell<Long, Long, ICardTraitChanges> e : changes.cellSet()) {
             changedCardTraits.put(e.getRowKey(), e.getColumnKey(), e.getValue().copy(this, true));
         }
+        bumpTraitVersion();
     }
 
     public boolean clearChangedCardTraits() {
@@ -4978,6 +5011,9 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
             changed = true;
         }
         changedCardTraits.clear();
+        if (changed) {
+            bumpTraitVersion();
+        }
         return changed;
     }
 
@@ -5739,12 +5775,13 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     @Override
     public final boolean isValid(final String restriction, final Player sourceController, final Card source, CardTraitBase spellAbility) {
         // Inclusive restrictions are Card types
-        final String[] incR = restriction.split("\\.", 2);
+        final int exclusiveIdx = restriction.indexOf('.');
+        String incR = exclusiveIdx == -1 ? restriction : restriction.substring(0, exclusiveIdx);
 
         boolean testFailed = false;
-        if (incR[0].startsWith("!")) {
+        if (incR.startsWith("!")) {
             testFailed = true; // a bit counter logical))
-            incR[0] = incR[0].substring(1); // consume negation sign
+            incR = incR.substring(1); // consume negation sign
         }
 
         // need to filter out prepared spells for other cards
@@ -5752,31 +5789,31 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
             return testFailed;
         }
 
-        if (incR[0].equals("Spell")) {
+        if (incR.equals("Spell")) {
             if (!isSpell()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("Permanent")) {
+        } else if (incR.equals("Permanent")) {
             if (!isPermanent()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("Effect")) {
+        } else if (incR.equals("Effect")) {
             if (!isImmutable()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("Emblem")) {
+        } else if (incR.equals("Emblem")) {
             if (!isEmblem()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("Boon")) {
+        } else if (incR.equals("Boon")) {
             if (!isBoon()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("card") || incR[0].equals("Card")) {
+        } else if (incR.equals("card") || incR.equals("Card")) {
             if (isImmutable()) {
                 return testFailed;
             }
-        } else if (incR[0].equals("Any")) {
+        } else if (incR.equals("Any")) {
             if (!(isCreature() || isPlaneswalker() || isBattle())) {
                 return false;
             }
@@ -5786,13 +5823,13 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
             ApiType apiType = ((SpellAbility) spellAbility).getApi();
             if (!(ApiType.DealDamage.equals(apiType) || ApiType.PreventDamage.equals(apiType)))
                 return false;*/
-        } else if (!getType().hasStringType(incR[0])) {
+        } else if (!getType().hasStringType(incR)) {
             return testFailed; // Check for wrong type
         }
 
-        if (incR.length > 1) {
-            final String excR = incR[1];
-            final String[] exRs = excR.split("\\+"); // Exclusive Restrictions are ...
+        if (exclusiveIdx != -1) {
+            final String excR = restriction.substring(exclusiveIdx + 1);
+            final String[] exRs = TextUtil.splitCachedPlus(excR); // Exclusive Restrictions are ...
             for (String exR : exRs) {
                 if (!hasProperty(exR, sourceController, source, spellAbility)) {
                     return testFailed;
