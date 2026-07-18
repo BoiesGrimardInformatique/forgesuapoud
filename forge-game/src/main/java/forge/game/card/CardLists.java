@@ -153,13 +153,10 @@ public class CardLists {
             return null;
         }
 
+        // a single shuffle already makes every subset equally likely
         final CardCollection cs = new CardCollection(c);
-        final CardCollection subList = new CardCollection();
-        while (subList.size() < amount) {
-            CardLists.shuffle(cs);
-            subList.add(cs.remove(0));
-        }
-        return subList;
+        CardLists.shuffle(cs);
+        return cs.subList(0, amount);
     }
 
     public static void shuffle(List<Card> list) {
@@ -473,27 +470,32 @@ public class CardLists {
             else if (num < sum) numList.add(num);
         }
         if (numList.isEmpty()) return false;
-        numList.sort(null);
 
         return isSubsetSum(numList, sum);
     }
 
     public static boolean isSubsetSum(List<Integer> numList, int sum) {
         if (sum == 0) return true;
-        int size = numList.size();
-        if (size == 0) return false;
+        if (sum < 0 || numList.isEmpty()) return false;
 
-        Integer last = numList.get(size - 1);
-        numList.remove(last);
-        // If last element is greater than sum, then ignore it
-        if (last > sum) {
-            return isSubsetSum(numList, sum);
+        // bottom-up subset-sum in O(n * sum) instead of exponential recursion
+        final boolean[] reachable = new boolean[sum + 1];
+        reachable[0] = true;
+        for (final Integer num : numList) {
+            final int n = num;
+            if (n <= 0 || n > sum) {
+                continue;
+            }
+            for (int i = sum; i >= n; i--) {
+                if (reachable[i - n]) {
+                    reachable[i] = true;
+                }
+            }
+            if (reachable[sum]) {
+                return true;
+            }
         }
-
-        // Else, check if sum can be obtained by:
-        // (a) excluding the last element
-        // (b) including the last element
-        return isSubsetSum(numList, sum) || isSubsetSum(numList, sum - last);
+        return false;
     }
 
     public static int getDifferentNamesCount(Iterable<Card> cardList) {
