@@ -383,6 +383,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
 
     public final void setCachedKeywords(final KeywordCollection col) {
         cachedKeywords = col;
+        card.bumpTraitVersion(); // keywords contribute granted static abilities
     }
 
     public final boolean hasKeyword(Keyword key) {
@@ -700,21 +701,35 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
         return triggers.add(t);
     }
 
+    // assembled static abilities, rebuilt lazily when the card's trait version moves;
+    // rebuilds swap in a fresh collection, so handed-out views stay valid snapshots
+    private FCollectionView<StaticAbility> staticAbilitiesCache;
+    private long staticAbilitiesCacheVersion = -1;
+
     public final FCollectionView<StaticAbility> getStaticAbilities() {
-        FCollection<StaticAbility> result = new FCollection<>(staticAbilities);
-        if (getStateName().equals(CardStateName.Original)) {
-            if (getCard().hasState(CardStateName.LeftSplit))
-                result.addAll(getCard().getState(CardStateName.LeftSplit).staticAbilities);
-            if (getCard().hasState(CardStateName.RightSplit))
-                result.addAll(getCard().getState(CardStateName.RightSplit).staticAbilities);
+        final long version = card.getTraitVersion();
+        FCollectionView<StaticAbility> cache = staticAbilitiesCache;
+        if (cache == null || staticAbilitiesCacheVersion != version) {
+            FCollection<StaticAbility> result = new FCollection<>(staticAbilities);
+            if (getStateName().equals(CardStateName.Original)) {
+                if (getCard().hasState(CardStateName.LeftSplit))
+                    result.addAll(getCard().getState(CardStateName.LeftSplit).staticAbilities);
+                if (getCard().hasState(CardStateName.RightSplit))
+                    result.addAll(getCard().getState(CardStateName.RightSplit).staticAbilities);
+            }
+            card.updateStaticAbilities(result, this);
+            staticAbilitiesCacheVersion = version;
+            staticAbilitiesCache = result;
+            cache = result;
         }
-        card.updateStaticAbilities(result, this);
-        return result;
+        return cache;
     }
     public final boolean addStaticAbility(StaticAbility stab) {
+        card.bumpTraitVersion();
         return staticAbilities.add(stab);
     }
     public final boolean removeStaticAbility(StaticAbility stab) {
+        card.bumpTraitVersion();
         return staticAbilities.remove(stab);
     }
 
@@ -918,6 +933,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
                 staticAbilities.add(sa.copy(card, lki));
             }
         }
+        card.bumpTraitVersion();
         if (lki) {
             this.changedType = source.changedType;
             if (source.landAbility != null) {
@@ -975,6 +991,7 @@ public class CardState implements GameObject, IHasSVars, ITranslatable {
                 staticAbilities.add(sa.copy(card, lki));
             }
         }
+        card.bumpTraitVersion();
     }
 
     public CardState copy(final Card host, CardStateName name, final boolean lki) {
