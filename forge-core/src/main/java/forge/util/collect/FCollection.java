@@ -74,6 +74,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      *            creation.
      */
     public FCollection(final T[] c) {
+        allocate(c.length);
         this.addAll(Arrays.asList(c));
     }
 
@@ -85,7 +86,21 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      *            creation.
      */
     public FCollection(final Iterable<? extends T> i) {
+        if (i instanceof Collection) {
+            allocate(((Collection<?>) i).size());
+        }
         this.addAll(i);
+    }
+
+    /**
+     * Pre-size the backing structures when the expected element count is known,
+     * to avoid rehash/grow churn while copying larger collections.
+     */
+    private void allocate(final int expectedSize) {
+        if (expectedSize > 12) { // the default capacities already fit smaller collections
+            set = new HashSet<>((int) (expectedSize / 0.75f) + 1);
+            ((ArrayList<T>) list).ensureCapacity(expectedSize);
+        }
     }
 
     /**

@@ -26,6 +26,7 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -403,21 +404,32 @@ public final class CardType implements Comparable<CardType>, CardTypeView {
         }
         return subtypes.contains(creatureType);
     }
+    private static final Map<String, String> mixedCaseCache = new ConcurrentHashMap<>();
+
     private static String toMixedCase(final String s) {
         if (s.isEmpty()) {
             return s;
         }
-        final StringBuilder sb = new StringBuilder();
-        // to handle hyphenated Types
-        // TODO checkout WordUtils for this
-        final String[] types = s.split("-");
-        for (int i = 0; i < types.length; i++) {
-            if (i != 0) {
-                sb.append("-");
+        // type names come from a bounded set of script strings and this runs
+        // on every creature type check, so memoize the conversion
+        String result = mixedCaseCache.get(s);
+        if (result == null) {
+            final StringBuilder sb = new StringBuilder();
+            // to handle hyphenated Types
+            // TODO checkout WordUtils for this
+            final String[] types = s.split("-");
+            for (int i = 0; i < types.length; i++) {
+                if (i != 0) {
+                    sb.append("-");
+                }
+                sb.append(StringUtils.capitalize(types[i]));
             }
-            sb.append(StringUtils.capitalize(types[i]));
+            result = sb.toString();
+            if (mixedCaseCache.size() < 8192) {
+                mixedCaseCache.put(s, result);
+            }
         }
-        return sb.toString();
+        return result;
     }
 
     @Override

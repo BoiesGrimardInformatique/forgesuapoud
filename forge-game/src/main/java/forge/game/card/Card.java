@@ -4950,6 +4950,11 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
     }
 
     public Iterable<ICardTraitChanges> getChangedCardTraitsList(CardState state) {
+        // fast path for the common case: iterating empty table views still
+        // builds costly cell iterators, and this runs on every ability lookup
+        if (changedCardTraitsByText.isEmpty() && changedCardTraits.isEmpty()) {
+            return ImmutableList.of(state.getLandTraitChanges()); // Layer 4
+        }
         return Iterables.<ICardTraitChanges>concat(
             changedCardTraitsByText.values(), // Layer 3
             ImmutableList.of(state.getLandTraitChanges()), // Layer 4
