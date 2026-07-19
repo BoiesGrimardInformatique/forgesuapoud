@@ -368,9 +368,12 @@ public class TextUtil {
      * @param printedName The name of the card.
      * @return A sortable name.
      */
+    // compiled once: this runs for every card name while loading the card database
+    private static final java.util.regex.Pattern SORTABLE_NAME_STRIP = java.util.regex.Pattern.compile("[^\\s'0-9a-z]");
+
     public static String toSortableName(String printedName) {
         if (printedName.startsWith("\"")) printedName = printedName.substring(1);
-        return moveArticleToEnd(printedName).toLowerCase().replaceAll("[^\\s'0-9a-z]", "");
+        return SORTABLE_NAME_STRIP.matcher(moveArticleToEnd(printedName).toLowerCase()).replaceAll("");
     }
 
 
@@ -394,8 +397,9 @@ public class TextUtil {
      */
     public static String moveArticleToEnd(String str) {
         for (String articleWord : ARTICLE_WORDS) {
-            if (str.startsWith(articleWord + " ")) {
-                str = str.substring(articleWord.length() + 1) + " " + articleWord;
+            final int len = articleWord.length();
+            if (str.length() > len && str.charAt(len) == ' ' && str.startsWith(articleWord)) {
+                str = str.substring(len + 1) + " " + articleWord;
                 return str;
             }
         }

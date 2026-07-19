@@ -34,9 +34,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     }
 
     /**
-     * The {@link Set} representation of this collection.
+     * The {@link Map} backing this collection: each element maps to itself, so
+     * the canonical instance can be fetched in constant time (see {@link #get}).
      */
-    private transient Set<T> set = new HashSet<>();
+    private transient HashMap<T, T> map = new HashMap<>();
 
     /**
      * The {@link List} representation of this collection.
@@ -48,7 +49,10 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
         in.defaultReadObject();
-        set = new HashSet<>(list);
+        map = new HashMap<>();
+        for (final T e : list) {
+            map.putIfAbsent(e, e);
+        }
     }
 
     /**
@@ -98,7 +102,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     private void allocate(final int expectedSize) {
         if (expectedSize > 12) { // the default capacities already fit smaller collections
-            set = new HashSet<>((int) (expectedSize / 0.75f) + 1);
+            map = new HashMap<>((int) (expectedSize / 0.75f) + 1);
             ((ArrayList<T>) list).ensureCapacity(expectedSize);
         }
     }
@@ -197,7 +201,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public int size() {
-        return set.size();
+        return map.size();
     }
 
     /**
@@ -205,11 +209,11 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public boolean isEmpty() {
-        return set.isEmpty();
+        return map.isEmpty();
     }
 
     public Set<T> asSet() {
-        return set;
+        return map.keySet();
     }
 
     /**
@@ -221,7 +225,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public boolean contains(final Object o) {
         if (o == null)
             return false;
-        return set.contains(o);
+        return map.containsKey(o);
     }
 
     /**
@@ -260,7 +264,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public boolean add(final T e) {
         if (e == null)
             return false;
-        if (set.add(e)) {
+        if (map.putIfAbsent(e, e) == null) {
             list.add(e);
             return true;
         }
@@ -278,7 +282,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public boolean remove(final Object o) {
         if (o == null)
             return false;
-        if (set.remove(o)) {
+        if (map.remove(o) != null) {
             list.remove(o);
             return true;
         }
@@ -289,8 +293,8 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public boolean removeIf(Predicate<? super T> filter) {
         // evaluate the (potentially expensive) filter only once per element,
         // then sync the list using cheap hash lookups
-        if (set.removeIf(filter)) {
-            list.removeIf(e -> !set.contains(e));
+        if (map.keySet().removeIf(filter)) {
+            list.removeIf(e -> !map.containsKey(e));
             return true;
         }
         return false;
@@ -301,7 +305,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public boolean containsAll(final Collection<?> c) {
-        return set.containsAll(c);
+        return map.keySet().containsAll(c);
     }
 
     /**
@@ -391,11 +395,11 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
         if (c == null)
             return false;
         for (final Object o : c) {
-            changed |= set.remove(o);
+            changed |= map.remove(o) != null;
         }
         if (changed) {
             // a single pass beats one linear list scan per removed element
-            list.removeIf(e -> !set.contains(e));
+            list.removeIf(e -> !map.containsKey(e));
         }
         return changed;
     }
@@ -407,8 +411,8 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public boolean retainAll(final Collection<?> c) {
         // ensure O(1) membership tests when c is a plain list
         final Collection<?> lookup = c instanceof Set || c instanceof FCollection ? c : new HashSet<>(c);
-        if (set.retainAll(lookup)) {
-            list.removeIf(e -> !set.contains(e));
+        if (map.keySet().retainAll(lookup)) {
+            list.removeIf(e -> !map.containsKey(e));
             return true;
         }
         return false;
@@ -419,8 +423,8 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      */
     @Override
     public void clear() {
-        if (set.isEmpty()) { return; }
-        set.clear();
+        if (map.isEmpty()) { return; }
+        map.clear();
         list.clear();
     }
 
@@ -450,8 +454,8 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public T replace(final int index, final T element) {
         final T old = list.set(index, element);
         if (old != element) {
-            set.remove(old);
-            set.add(element);
+            map.remove(old);
+            map.putIfAbsent(element, element);
         }
         return old;
     }
@@ -474,7 +478,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
      * @return whether this collection changed as a result of this method call.
      */
     private boolean insert(int index, final T element) {
-        if (set.add(element)) {
+        if (map.putIfAbsent(element, element) == null) {
             list.add(index, element);
             return true;
         }
@@ -499,7 +503,7 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
     public T remove(final int index) {
         final T removedItem = list.remove(index);
         if (removedItem != null) {
-            set.remove(removedItem);
+            map.remove(removedItem);
         }
         return removedItem;
     }
@@ -586,15 +590,8 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
         if (obj == null) {
             return null;
         }
-        if (!set.contains(obj)) { // O(1) miss check before the linear scan for the canonical element
-            return obj;
-        }
-        for(T x : this) {
-            if (x.equals(obj)) {
-                return x;
-            }
-        }
-        return obj;
+        final T canonical = map.get(obj);
+        return canonical != null ? canonical : obj;
     }
 
     @Override
@@ -604,12 +601,12 @@ public class FCollection<T> implements List<T>, /*Set<T>,*/ FCollectionView<T>, 
 
     @Override
     public boolean anyMatch(Predicate<? super T> test) {
-        return set.stream().anyMatch(test);
+        return map.keySet().stream().anyMatch(test);
     }
 
     @Override
     public boolean allMatch(Predicate<? super T> test) {
-        return set.stream().allMatch(test);
+        return map.keySet().stream().allMatch(test);
     }
 
     /**

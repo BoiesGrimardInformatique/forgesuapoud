@@ -226,19 +226,48 @@ public final class FileUtil {
      * @return list of strings
      */
     public static List<String> readAllLines(final Reader reader, final boolean mayTrim) {
-        final List<String> list = new ArrayList<>();
         try {
-            final BufferedReader in = new BufferedReader(reader);
-            String line;
-            while ((line = in.readLine()) != null) {
-                if (mayTrim) {
-                    line = line.trim();
-                }
-                list.add(line);
+            // bulk-read then split: much cheaper than per-line BufferedReader
+            // machinery for the thousands of small files read at startup
+            final StringBuilder sb = new StringBuilder(8192);
+            final char[] buf = new char[8192];
+            int read;
+            while ((read = reader.read(buf)) != -1) {
+                sb.append(buf, 0, read);
             }
-            in.close();
+            reader.close();
+            return splitIntoLines(sb.toString(), mayTrim);
         } catch (final IOException ex) {
             throw new RuntimeException("FileUtil : readAllLines() error, " + ex);
+        }
+    }
+
+    /**
+     * Split content into lines with the same semantics as
+     * {@link BufferedReader#readLine()}: lines are separated by \n, \r or \r\n,
+     * and a trailing terminator does not produce an extra empty line.
+     */
+    private static List<String> splitIntoLines(final String content, final boolean mayTrim) {
+        final List<String> list = new ArrayList<>();
+        final int n = content.length();
+        int pos = 0;
+        while (pos < n) {
+            int i = pos;
+            while (i < n && content.charAt(i) != '\n' && content.charAt(i) != '\r') {
+                i++;
+            }
+            String line = content.substring(pos, i);
+            if (mayTrim) {
+                line = line.trim();
+            }
+            list.add(line);
+            if (i < n) {
+                if (content.charAt(i) == '\r' && i + 1 < n && content.charAt(i + 1) == '\n') {
+                    i++;
+                }
+                i++;
+            }
+            pos = i;
         }
         return list;
     }
@@ -250,22 +279,11 @@ public final class FileUtil {
      * @return list of strings
      */
     public static List<String> readAllLines(final File file, final boolean mayTrim) {
-        final List<String> list = new ArrayList<>();
         try {
-            final BufferedReader in = new BufferedReader(
-                    new InputStreamReader(Files.newInputStream(file.toPath()), StandardCharsets.UTF_8));
-            String line;
-            while ((line = in.readLine()) != null) {
-                if (mayTrim) {
-                    line = line.trim();
-                }
-                list.add(line);
-            }
-            in.close();
+            return splitIntoLines(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8), mayTrim);
         } catch (final IOException ex) {
             throw new RuntimeException("FileUtil : readAllLines() error, " + ex);
         }
-        return list;
     }
 
     // returns a list of <name, url> pairs.  if the name is not in the file, it is synthesized from the url
