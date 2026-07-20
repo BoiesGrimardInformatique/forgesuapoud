@@ -1,10 +1,22 @@
-# forgesuapoud
+# forgesuapoud — an unofficial fork of Forge
 
-A personal fork of [**Forge**](https://github.com/Card-Forge/forge), the open-source *Magic: The Gathering* rules engine.
+> ### ⚠️ This is **not** the official Forge
+>
+> **Looking to play Forge? Go to [Card-Forge/forge](https://github.com/Card-Forge/forge) instead** — that is the real project, with proper releases, installers and support.
+>
+> This repository is one person's private fork, modified for their own use. It is **unofficial and unsupported**: no releases, no installers, no guarantee it builds, works, or stays in sync with upstream. Do not use it as your way of installing Forge.
+>
+> **Bugs you hit here are not upstream's problem.** Please do not open issues on Card-Forge/forge or ask on the Forge Discord about anything in this fork — the changes below are not theirs.
 
-Everything the upstream project does, this fork does too — this document only covers what is **different** here. For the game itself, its features and its community, see the [upstream repository](https://github.com/Card-Forge/forge) and the [Forge Discord](https://discord.gg/HcPJNyD66a).
+---
 
-> Forge is not affiliated with Wizards of the Coast.
+## What this is
+
+A personal fork of [**Forge**](https://github.com/Card-Forge/forge), the open-source *Magic: The Gathering* rules engine, kept for local experiments.
+
+Everything the upstream project does, this fork does too — this document only covers what is **different** here. For the game itself, its features and its community, see the [upstream repository](https://github.com/Card-Forge/forge).
+
+> Forge is not affiliated with Wizards of the Coast. Neither is this fork.
 
 ---
 
@@ -87,4 +99,6 @@ Both seats are played by Forge's AI, so results measure how well the AI pilots a
 
 ## License and credits
 
-Forge is developed by the [Card-Forge community](https://github.com/Card-Forge/forge) and released under the **GNU General Public License v3**. This fork inherits that license; see [`LICENSE`](LICENSE).
+Forge — the engine, the card scripts, the interface, essentially everything in this repository — is the work of the [Card-Forge community](https://github.com/Card-Forge/forge). This fork contributes nothing but the handful of changes listed above.
+
+Released under the **GNU General Public License v3**; this fork inherits it. See [`LICENSE`](LICENSE).
