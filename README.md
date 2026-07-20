@@ -1,105 +1,90 @@
-# ⚔️  Forge: The Magic: The Gathering Rules Engine
+# forgesuapoud
 
-Join the **Forge community** on [Discord](https://discord.gg/HcPJNyD66a)!
+A personal fork of [**Forge**](https://github.com/Card-Forge/forge), the open-source *Magic: The Gathering* rules engine.
 
-[![Test build](https://github.com/Card-Forge/forge/actions/workflows/test-build.yaml/badge.svg)](https://github.com/Card-Forge/forge/actions/workflows/test-build.yaml)
+Everything the upstream project does, this fork does too — this document only covers what is **different** here. For the game itself, its features and its community, see the [upstream repository](https://github.com/Card-Forge/forge) and the [Forge Discord](https://discord.gg/HcPJNyD66a).
 
----
-
-## ✨ Introduction
-
-**Forge** is a dynamic and open-source **Rules Engine** tailored for **Magic: The Gathering** enthusiasts. Developed by a community of passionate programmers, Forge allows players to explore the rich universe of MTG through a flexible, engaging platform. 
-
-**Note:** Forge operates independently and is not affiliated with Wizards of the Coast.
+> Forge is not affiliated with Wizards of the Coast.
 
 ---
 
-## 🌟 Key Features
+## What this fork changes
 
-- **🌐 Cross-Platform Support:** Play on **Windows, Mac, Linux,** and **Android**.
-- **🔧 Extensible Architecture:** Built in **Java**, Forge encourages developers to contribute by adding features and cards.
-- **🎮 Versatile Gameplay:** Dive into single-player modes or challenge opponents online!
+### Faster deck editor
 
----
+Opening the deck editor used to take 4-5 seconds the first time and 2-3 seconds on every reopen. Four fixes, all removing redundant work from the Swing event thread:
 
-## 🛠️ Installation Guide
+| Fix | Effect |
+| --- | --- |
+| A section `ActionListener` was re-added on every open of the cached controller, so listeners accumulated and each one re-triggered a full card-pool reload | Reopens are near-instant |
+| The catalog was loaded twice on first open, because the existing guard compared a pool against a *copy* of itself | ~700 ms saved; switching Main ↔ Sideboard is now free |
+| `ItemManager.setPoolImpl` filled the model immediately before `updateView` cleared and refilled it | One less full copy of ~90k cards per load |
+| `ItemColumn.compare` rebuilt an entire `Comparator` chain on *every comparison* | Speeds up every sorted list in the app, not just the deck editor |
 
-### 📥 Desktop Installation
-1. **Latest Releases:** Download the latest version [here](https://github.com/Card-Forge/forge/releases/latest).
-2. **Snapshot Build:** For the latest development version, grab the `forge-gui-desktop` tarball from our [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots).
-   - **Tip:** Extract to a new folder to prevent version conflicts.
-3. **User Data Management:** Previous players’ data is preserved during upgrades.
-4. **Java Requirement:** Ensure you have **Java 17 or later** installed.
+### Alchemy cards can be left out
 
-### 📱 Android Installation
-- _(Note: **Android 11** is the minimum requirement with at least **6GB RAM** to run smoothly. You need to enable **"Install unknown apps"** for Forge to initialize and update itself)_
-- Download the **APK** from the [Snapshot Build](https://github.com/Card-Forge/forge/releases/tag/daily-snapshots). On the first launch, Forge will automatically download all necessary assets.
+Alchemy is *Magic: The Gathering Arena*'s digital-only content. This fork can keep it out of the card database entirely, rather than filtering it screen by screen — so it also stays out of generated decks, AI decks and draft.
 
----
+Two things count as Alchemy:
 
-## 🎮 Modes of Play
+- **Rebalanced cards**, whose names start with `A-`.
+- **Cards exclusive to the Alchemy sets** — `Online` editions whose code starts with `Y` (`YMID`, `YNEO`, …) or is `HBG`.
 
-Forge offers various exciting gameplay options:
+Paper remasters and anthologies that merely happen to be digital releases (`AKR`, `HA*`, `KLR`, `PRM`, `SIS`, …) are deliberately **kept**. A card reprinted into an Alchemy set but also printed on paper is kept too.
 
-### 🌍 Adventure Mode
-Embark on a thrilling single-player journey where you can:
-- Explore an overworld map.
-- Challenge diverse AI opponents.
-- Collect cards and items to boost your abilities.
+**On every launch the game asks whether to include Alchemy cards in that session**, in the configured language. The answer applies to that run only. The `UI_LOAD_ALCHEMY_CARDS` preference supplies the pre-selected button and remains the fallback — command-line modes never show the dialog and simply follow it.
 
-<img width="1282" height="752" alt="Shandalar World" src="https://github.com/user-attachments/assets/9af31471-d688-442f-9418-9807d8635b72" />
+### `mydecks/`
 
-### 🔍 Quest Modes
-Engage in focused gameplay without the overworld exploration—perfect for quick sessions!
+Personal decklists under version control. The game does **not** read them from here — Forge loads decks from the user profile, so copy one across to play it:
 
-<img width="1282" height="752" alt="Quest Duels" src="https://github.com/user-attachments/assets/b9613b1c-e8c3-4320-8044-6922c519aad4" />
+```bash
+cp "mydecks/BG Mono Red Burn.dck" ~/.forge/decks/constructed/
+```
 
-### 🤖 AI Formats
-Test your skills against AI in multiple formats:
-- **Sealed**
-- **Draft**
-- **Commander**
-- **Cube**
-
-For comprehensive gameplay instructions, visit our [User Guide](https://github.com/Card-Forge/forge/wiki/User-Guide).
-
-<img width="1282" height="752" alt="Sealed" src="https://github.com/user-attachments/assets/ae603dbd-4421-4753-a333-87cb0a28d772" />
+(`forge-gui/res/decks` is gitignored upstream, as it is user-profile territory — hence a folder outside the game's resources.)
 
 ---
 
-## 💬 Support & Community
+## Building and running
 
-Need help? Join our vibrant Discord community! 
-- 📜 Read the **#rules** and explore the **FAQ**.
-- ❓ Ask your questions in the **#help** channel for assistance.
+Requires a **JDK 17 or newer** (JDK 21 works) and **Maven**. On Debian/Ubuntu:
+
+```bash
+sudo apt install openjdk-21-jdk maven
+```
+
+Build the desktop client:
+
+```bash
+mvn -B clean package -DskipTests -Dcheckstyle.skip=true -pl forge-gui-desktop -am
+```
+
+Install the jar next to the game resources and run it:
+
+```bash
+mkdir -p ~/.local/share/forge-app
+cp forge-gui-desktop/target/forge-gui-desktop-*-jar-with-dependencies.jar ~/.local/share/forge-app/forge.jar
+ln -sfn "$(pwd)/forge-gui/res" ~/.local/share/forge-app/res
+(cd ~/.local/share/forge-app && java -Xmx4g -jar forge.jar)
+```
+
+`forge.jar` is a frozen copy, so rebuild and re-copy it after any code change. The `res` symlink points back into this repository — moving or deleting the clone will break the game's resources.
+
+### Headless simulation
+
+Forge can play AI-vs-AI matches with no GUI, which is handy for checking that decks load and function:
+
+```bash
+java -jar forge.jar sim -d "Deck A.dck" "Deck B.dck" -n 20 -c 60 -q
+```
+
+Two things to know: `.dck` files are always loaded from `~/.forge/decks/constructed/` (the `-D` flag only applies to tournaments), and `-f` selects the *game type*, not format legality — there is no Modern/Standard filter, and the bundled AI decks draw on all of Magic's history.
+
+Both seats are played by Forge's AI, so results measure how well the AI pilots a deck rather than the deck's real strength. Decks that need fine decisions — burn, in particular — score far below what a human pilot would achieve.
 
 ---
 
-## 🤝 Contributing to Forge
+## License and credits
 
-We love community contributions! Interested in helping? Check out our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
-
----
-
-## ℹ️ About Forge
-
-Forge aims to deliver an immersive and customizable Magic: The Gathering experience for fans around the world. 
-
-### 📊 Repository Statistics
-
-| Metric         | Count                                                       |
-|----------------|-------------------------------------------------------------|
-| **⭐ Stars:**   | [![GitHub stars](https://img.shields.io/github/stars/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/stargazers) |
-| **🍴 Forks:**   | [![GitHub forks](https://img.shields.io/github/forks/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/network) |
-| **👥 Contributors:** | [![GitHub contributors](https://img.shields.io/github/contributors/Card-Forge/forge?style=flat-square)](https://github.com/Card-Forge/forge/graphs/contributors) |
-
----
-
-**📄 License:** [GPL-3.0](LICENSE)
-<div align="center" style="display: flex; align-items: center; justify-content: center;">
-    <div style="margin-left: auto;">
-        <a href="#top">
-            <img src="https://img.shields.io/badge/Back%20to%20Top-000000?style=for-the-badge&logo=github&logoColor=white" alt="Back to Top">
-        </a>
-    </div>
-</div>
+Forge is developed by the [Card-Forge community](https://github.com/Card-Forge/forge) and released under the **GNU General Public License v3**. This fork inherits that license; see [`LICENSE`](LICENSE).
