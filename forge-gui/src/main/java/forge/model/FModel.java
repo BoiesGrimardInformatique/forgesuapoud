@@ -86,7 +86,24 @@ public final class FModel {
             getPreferences().getPrefBoolean(FPref.UI_LOAD_NONLEGAL_CARDS),
             getPreferences().getPrefBoolean(FPref.ALLOW_CUSTOM_CARDS_IN_DECKS_CONFORMANCE),
             getPreferences().getPrefBoolean(FPref.UI_SMART_CARD_ART),
-            getPreferences().getPrefBoolean(FPref.UI_LOAD_ALCHEMY_CARDS)));
+            isLoadAlchemyCards()));
+    // Per-session answer to "use Alchemy cards?", set before the card database is built.
+    // Null means "not asked", in which case the saved preference decides.
+    private static Boolean loadAlchemyCardsThisSession = null;
+
+    /**
+     * Overrides UI_LOAD_ALCHEMY_CARDS for this run only. Must be called before the card
+     * database is first built (i.e. before FModel.initialize), since the pool is memoized.
+     */
+    public static void setLoadAlchemyCardsForSession(final boolean value) {
+        loadAlchemyCardsThisSession = value;
+    }
+
+    public static boolean isLoadAlchemyCards() {
+        return loadAlchemyCardsThisSession != null ? loadAlchemyCardsThisSession
+                : getPreferences().getPrefBoolean(FPref.UI_LOAD_ALCHEMY_CARDS);
+    }
+
     private static final Supplier<QuestPreferences> questPreferences = Suppliers.memoize(QuestPreferences::new);
     private static final Supplier<ConquestPreferences> conquestPreferences = Suppliers.memoize(() -> {
        final ConquestPreferences cp = new ConquestPreferences();
