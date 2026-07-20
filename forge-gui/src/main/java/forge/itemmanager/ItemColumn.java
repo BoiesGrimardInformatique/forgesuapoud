@@ -31,6 +31,12 @@ public class ItemColumn implements Comparator<Entry<InventoryItem, Integer>> {
     private final Function<Entry<InventoryItem, Integer>, Comparable<?>> fnSort;
     private final Function<Entry<? extends InventoryItem, Integer>, Object> fnDisplay;
 
+    // Comparators are built lazily once and reused. fnSort is final, so the ASC/DESC
+    // orderings never change; the original code rebuilt the whole Comparator chain on every
+    // single compare() call, allocating millions of objects during a full catalog sort.
+    private Comparator<Entry<InventoryItem, Integer>> ascComparator;
+    private Comparator<Entry<InventoryItem, Integer>> descComparator;
+
     public ItemColumn(ItemColumnConfig config0) {
         this(config0, config0.getFnSort(), config0.getFnDisplay());
     }
@@ -122,10 +128,23 @@ public class ItemColumn implements Comparator<Entry<InventoryItem, Integer>> {
     @SuppressWarnings({ "rawtypes", "unchecked" })
     @Override
     public int compare(Entry<InventoryItem, Integer> o1, Entry<InventoryItem, Integer> o2) {
-        if (getSortState().equals(SortState.NONE)) {
+        final SortState state = getSortState();
+        if (state.equals(SortState.NONE)) {
             return 0;
         }
 
-        return Comparator.nullsFirst(Comparator.<Entry<InventoryItem, Integer>, Comparable>comparing(this.fnSort, Comparator.<Comparable>nullsFirst(getSortState().equals(SortState.ASC) ? Comparator.naturalOrder() : Comparator.reverseOrder()))).compare(o1, o2);
+        if (state.equals(SortState.ASC)) {
+            if (ascComparator == null) {
+                ascComparator = Comparator.nullsFirst(Comparator.<Entry<InventoryItem, Integer>, Comparable>comparing(
+                        this.fnSort, Comparator.<Comparable>nullsFirst(Comparator.naturalOrder())));
+            }
+            return ascComparator.compare(o1, o2);
+        }
+
+        if (descComparator == null) {
+            descComparator = Comparator.nullsFirst(Comparator.<Entry<InventoryItem, Integer>, Comparable>comparing(
+                    this.fnSort, Comparator.<Comparable>nullsFirst(Comparator.reverseOrder())));
+        }
+        return descComparator.compare(o1, o2);
     }
 }
