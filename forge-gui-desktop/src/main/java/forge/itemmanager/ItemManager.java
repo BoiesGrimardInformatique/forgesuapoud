@@ -476,7 +476,9 @@ public abstract class ItemManager<T extends InventoryItem> extends JPanel implem
     private void setPoolImpl(final ItemPool<T> pool0, final boolean infinite) {
         this.model.clear();
         this.pool = pool0;
-        this.model.addItems(this.pool);
+        // No addItems here: updateView(true, ...) below clears the model and repopulates
+        // it (filtered/unique/plain) from this.pool, so populating it now is wasted work
+        // — a full copy of the entire pool on every setPool call.
         this.model.setInfinite(infinite);
         this.updateView(true, null);
     }

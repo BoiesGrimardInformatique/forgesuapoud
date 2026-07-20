@@ -45,6 +45,7 @@ import forge.Singletons;
 import forge.gamemodes.match.HostedMatch;
 import forge.gamemodes.quest.data.QuestPreferences.QPref;
 import forge.gamemodes.quest.io.QuestDataIO;
+import forge.gui.FThreads;
 import forge.gui.SOverlayUtils;
 import forge.gui.framework.FScreen;
 import forge.gui.framework.InvalidLayoutFileException;
@@ -299,6 +300,12 @@ public enum FControl implements KeyEventDispatcher {
         setGlobalKeyboardHandler();
         FView.SINGLETON_INSTANCE.setSplashProgessBarMessage(getLocalizer().getMessage("lblOpeningMainWindow"));
         SwingUtilities.invokeLater(() -> Singletons.getView().initialize());
+
+        // Pre-warm the full-card ItemPool on a background thread while the main menu opens.
+        // This memoized pool (FModel.getAllCards()) is otherwise built lazily on the EDT the
+        // first time the Deck Editor is opened, which is the bulk of its initial load time.
+        // The card DB is already fully loaded by now and the memoized supplier is thread-safe.
+        FThreads.invokeInBackgroundThread(FModel::getAllCards);
     }
 
     public boolean isSnapshot() {

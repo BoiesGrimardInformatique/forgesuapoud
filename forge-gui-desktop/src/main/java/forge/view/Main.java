@@ -62,6 +62,10 @@ public final class Main {
 
         // Start splash screen first, then data models, then controller.
         if (args.length == 0) {
+            // Must come first: the answer decides how the card database is built below,
+            // and that database is memoized for the rest of the run.
+            AlchemyStartupPrompt.ask();
+
             Singletons.initializeOnce(true);
 
             // Controller can now step in and take over.

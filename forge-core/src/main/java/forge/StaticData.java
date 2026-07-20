@@ -64,9 +64,12 @@ public class StaticData {
     private static StaticData lastInstance = null;
 
     public StaticData(CardStorageReader cardReader, CardStorageReader customCardReader, String editionFolder, String customEditionsFolder, String blockDataFolder, String cardArtPreference, boolean enableUnknownCards, boolean loadNonLegalCards) {
-        this(cardReader, null, customCardReader, null, editionFolder, customEditionsFolder, blockDataFolder, "", cardArtPreference, enableUnknownCards, loadNonLegalCards, false, false);
+        this(cardReader, null, customCardReader, null, editionFolder, customEditionsFolder, blockDataFolder, "", cardArtPreference, enableUnknownCards, loadNonLegalCards, false, false, true);
     }
     public StaticData(CardStorageReader cardReader, CardStorageReader tokenReader, CardStorageReader customCardReader, CardStorageReader customTokenReader, String editionFolder, String customEditionsFolder, String blockDataFolder, String setLookupFolder, String cardArtPreference, boolean enableUnknownCards, boolean loadNonLegalCards, boolean allowCustomCardsInDecksConformance, boolean enableSmartCardArtSelection) {
+        this(cardReader, tokenReader, customCardReader, customTokenReader, editionFolder, customEditionsFolder, blockDataFolder, setLookupFolder, cardArtPreference, enableUnknownCards, loadNonLegalCards, allowCustomCardsInDecksConformance, enableSmartCardArtSelection, true);
+    }
+    public StaticData(CardStorageReader cardReader, CardStorageReader tokenReader, CardStorageReader customCardReader, CardStorageReader customTokenReader, String editionFolder, String customEditionsFolder, String blockDataFolder, String setLookupFolder, String cardArtPreference, boolean enableUnknownCards, boolean loadNonLegalCards, boolean allowCustomCardsInDecksConformance, boolean enableSmartCardArtSelection, boolean loadAlchemyCards) {
         this.cardReader = cardReader;
         this.tokenReader = tokenReader;
         this.editions = new CardEdition.Collection(new CardEdition.Reader(new File(editionFolder)));
@@ -98,12 +101,30 @@ public class StaticData {
                 }
             }
 
+            // Names that appear ONLY in Alchemy digital sets (Y.../HBG). Any name that also
+            // appears in a non-Alchemy set is kept (protects paper cards reprinted digitally).
+            Set<String> alchemyOnlyCards = new HashSet<>();
+            if (!loadAlchemyCards) {
+                Set<String> nonAlchemyCards = new HashSet<>();
+                for (CardEdition e : editions) {
+                    boolean alchemy = isAlchemyEdition(e);
+                    for (CardEdition.EditionEntry cis : e.getAllCardsInSet()) {
+                        (alchemy ? alchemyOnlyCards : nonAlchemyCards).add(cis.name());
+                    }
+                }
+                alchemyOnlyCards.removeAll(nonAlchemyCards);
+            }
+
             for (CardRules card : cardReader.loadCards()) {
                 if (null == card) continue;
 
                 final String cardName = card.getPreInitName();
 
                 if (!loadNonLegalCards && funnyCards.contains(cardName) && !card.getType().isBasicLand())
+                    filtered.add(cardName);
+
+                // Alchemy exclusion: rebalanced "A-" cards plus cards exclusive to Alchemy sets.
+                if (!loadAlchemyCards && (cardName.startsWith("A-") || alchemyOnlyCards.contains(cardName)))
                     filtered.add(cardName);
 
                 if (card.isVariant()) {
@@ -164,6 +185,20 @@ public class StaticData {
                 }
             }
         }
+    }
+
+    /**
+     * True for MTG Arena "Alchemy" digital sets: Online-type editions whose code
+     * starts with "Y" (YMID, YNEO, ...) or is "HBG" (Alchemy Horizons: Baldur's Gate).
+     * Deliberately narrower than Type.ONLINE, which also covers remasters/anthologies
+     * of paper cards (AKR, HA*, PRM, SIS, ...) that must NOT be treated as Alchemy.
+     */
+    private static boolean isAlchemyEdition(CardEdition e) {
+        if (e.getType() != CardEdition.Type.ONLINE) {
+            return false;
+        }
+        final String code = e.getCode();
+        return code.startsWith("Y") || code.equals("HBG");
     }
 
     public static StaticData instance() {
